@@ -22,7 +22,11 @@
 
     char *rem = deq_head_rem(q, b);
     printf("rem scenario: rem=%s len=%d\n", rem ? rem : "(null)", deq_len(q));
-    printf("rem scenario: %s\n", deq_str(q, 0));
+
+    char *after_rem = deq_str(q, 0);
+    printf("rem scenario: %s\n", after_rem ? after_rem : "(null)");
+    free(after_rem);
+    free(rem);
 
     deq_del(q, free);
   }
@@ -51,8 +55,10 @@
 
     char *got = deq_head_get(q);
     printf("get scenario: got=%s len=%d\n", got ? got : "(null)", deq_len(q));
-    printf("get scenario: %s\n", deq_str(q, 0));
 
+    char *after_get = deq_str(q, 0);
+    printf("get scenario: %s\n", after_get ? after_get : "(null)");
+    free(after_get);
     free(got);
 
     deq_del(q, free);
