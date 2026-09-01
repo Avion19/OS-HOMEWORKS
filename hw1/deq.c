@@ -37,41 +37,90 @@ static void put(Rep r, End e, Data d)
   r->len++;
   struct Node *added = (Node)malloc(sizeof(struct Node));
   added->data = d;
+  added->np[Head] = 0;
+  added->np[Tail] = 0;
 
   // empty list case
-  if (r->ht[e] == 0 )
+  if (r->ht[e] == 0)
   {
     r->ht[Head] = added;
     r->ht[Tail] = added;
-    added->np[Head] = 0;
-    added->np[Tail] = 0;
   }
   else
   {
-    // single element case
-    if (r->ht[Head] == r->ht[Tail])
-    {
-      if (e == Head)
-      {
-        added->np[Head] = 0;
-        added->np[Tail] = r->ht[Head];
-      }
-      else
-      {
-        added->np[Head] = r->ht[Tail];
-        added->np[Tail] = 0;
-      }
-    }
-
-    //update the neighbors of the new node
+    End opp = (e == Head) ? Tail : Head;
+    added->np[opp] = r->ht[e];
     r->ht[e]->np[e] = added;
     r->ht[e] = added;
   }
 }
 
 static Data ith(Rep r, End e, int i) { return 0; }
-static Data get(Rep r, End e) { return 0; }
-static Data rem(Rep r, End e, Data d) { return 0; }
+static Data get(Rep r, End e)
+{
+  if (r->len == 0)
+    return 0;
+
+  Data d = r->ht[e]->data;
+
+  if (r->len == 1)
+  {
+    r->ht[Head] = 0;
+    r->ht[Tail] = 0;
+    free(r->ht[e]);
+  }
+  else
+  {
+    if (e == Head)
+    {
+      Node next = r->ht[e]->np[Tail];
+      free(r->ht[e]);
+      r->ht[Head] = next;
+      next->np[Head] = 0;
+    }
+    else if (e == Tail)
+    {
+      Node prev = r->ht[e]->np[Head];
+      free(r->ht[e]);
+      r->ht[Tail] = prev;
+      prev->np[Tail] = 0;
+    }
+  }
+  r->len--;
+  return d;
+}
+static Data rem(Rep r, End e, Data d) { 
+  if (r->len == 0) return 0;
+  
+  //edge case head or tail has the data
+  // if (r->ht[e]->data == d) {
+  //   return get(r, e);
+  // }
+
+  End step = (e == Head) ? Tail : Head;
+  Node curr = r->ht[e];
+
+  
+    while (curr != 0) {
+      if (curr->data == d) {
+        //edge head or tail case
+        if (curr == r->ht[e]) {
+          return get(r, e);
+        }
+        Node prev = curr->np[Head];
+        Node next = curr->np[Tail];
+        prev->np[Tail] = next;
+        next->np[Head] = prev;
+        curr->np[Head] = 0;
+        curr->np[Tail] = 0;
+        free(curr);
+        r->len--;
+        return d;
+      }
+      curr = curr->np[step];
+    }
+  return 0; 
+}
 
 extern Deq deq_new()
 {
