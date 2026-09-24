@@ -18,8 +18,8 @@ The main files are:
 
 - `balloc.c` and `balloc.h`: public allocator implementation and interface
 - `freelist.c` and `freelist.h`: per-order free lists, splitting, and coalescing
-- `bbm.c`/`bbm.h` and `bm.c`/`bm.h`: bitmap support used internally by the
-  free-list implementation
+- `bbm.c` and `bbm.h`: buddy-pair bitmap operations and buddy address helpers
+- `bm.c` and `bm.h`: general-purpose bitmap implementation and interface
 - `utils.c` and `utils.h`: memory mapping, bit operations, and size conversions
 - `wrapper.c`: `malloc()` and `free()` wrapper backed by the buddy allocator
 - `deq/deq.c` and `deq/deq.h`: double-ended deque implementation and interface
@@ -97,17 +97,41 @@ up to a block order and asks the free-list code for memory. `bfree()` and
 actual allocation order. This separation lets `balloc.c` manage the allocator
 and lets `freelist.c` focus on splitting and merging blocks.
 
-The deque tests exercise the allocator through the `malloc()` and `free()`
-wrapper. `make test-deq` links the deque source and its test suite with that
-wrapper; the deque source and tests remain unchanged.
+Testing the allocator through the deque was useful because it showed the
+allocator handling regular `malloc()` and `free()` calls. The wrapper defines
+those functions and sends them to `balloc()` and `bfree()`. The deque source and
+its original test suite stay unchanged; `make test-deq` links them with the
+wrapper, and `make test` runs those tests along with the buddy module tests.
 
 ## Testing
 
-- `make test-buddy`: runs the buddy allocator tests for `utils`, `freelist`,
-  and `balloc`.
-- `make test-deq`: runs the deque tests with the allocator wrapper, which routes
-  the deque's `malloc()` and `free()` calls through `balloc()` and `bfree()`.
-- `make test`: runs both test suites.
+The buddy test suite in `tests/buddy_test.c` covers `utils`, `freelist`, and
+`balloc`:
+
+Run this suite with `make test-buddy`. It builds and runs `buddy_tests` without
+running the deque suite; use `make test-deq` for deque tests or `make test` to
+run both suites.
+
+- Utility arithmetic and bit operations
+- Free-list splitting, merging, allocation-size lookup, and exhaustion
+- Public allocator rounding, data preservation, invalid requests, and exhaustion
+- Double-free rejection and rejection of a misaligned free
+- Non-power-of-two pools, pools larger than the maximum block, and independent pools
+- Small (64-byte), medium (4 KiB), and large (1 MiB) pools filled to exhaustion,
+  freed, and checked for full coalescing
+
+There are no standalone `bm` or `bbm` tests. The free-list and allocator tests
+exercise those bitmap modules through their normal use.
+
+`make test-deq` runs the original deque suite with allocator-backed
+`malloc()` and `free()`.
+
+## Results
+
+`make test` runs both the buddy module tests and the deque suite. The buddy
+tests intentionally print descriptive diagnostics while checking invalid
+requests, frees, and exhausted pools. A successful run ends with `All buddy
+allocator tests passed.` and `All deque tests passed.`
 
 ```
 make test
