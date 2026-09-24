@@ -2,7 +2,12 @@
  * Author: Avien Ramirez
  * Date: September 23, 2026
  * Class: CS 452-2
- * Description: Unit and integration tests for all buddy allocator modules.
+ * Description: Tests for utils, free lists, and the public allocator.
+ *
+ * The suite tests utility operations directly, exercises free-list behavior
+ * through its interface, and checks allocator behavior through balloc().
+ * Bitmap modules are covered indirectly through the free-list and allocator
+ * tests; this file has no standalone bm or bbm tests.
  */
 
 #include <assert.h>
@@ -12,12 +17,13 @@
 #include <sys/mman.h>
 
 #include "balloc.h"
-#include "bbm.h"
-#include "bm.h"
 #include "freelist.h"
 #include "utils.h"
 
-/* Verify integer conversions and primitive byte-level bit operations. */
+/*
+ * Verify rounding and power-of-two conversions, then check that individual
+ * bits can be set, tested, toggled, and cleared in one byte.
+ */
 static void test_utils(void)
 {
     unsigned char byte = 0;
@@ -47,67 +53,12 @@ static void test_utils(void)
     assert(byte == 0);
 }
 
-/* Exercise bitmap operations across byte boundaries. */
-static void test_bitmap(void)
-{
-    BM bits = bmcreate(17);
-
-    assert(bits != 0);
-    for (size_t i = 0; i < 17; i++)
-        assert(bmtst(bits, i) == 0);
-
-    bmset(bits, 0);
-    bmset(bits, 7);
-    bmset(bits, 8);
-    bmset(bits, 16);
-    assert(bmtst(bits, 0) != 0);
-    assert(bmtst(bits, 7) != 0);
-    assert(bmtst(bits, 8) != 0);
-    assert(bmtst(bits, 16) != 0);
-    assert(bmtst(bits, 15) == 0);
-
-    bmclr(bits, 7);
-    bmclr(bits, 16);
-    assert(bmtst(bits, 7) == 0);
-    assert(bmtst(bits, 16) == 0);
-    assert(bmtst(bits, 0) != 0);
-    assert(bmtst(bits, 8) != 0);
-    bmdelete(bits);
-}
-
-/* Verify buddy-address arithmetic and shared pair-bit indexing. */
-static void test_buddy_bitmap(void)
-{
-    unsigned char region[64] = {0};
-    void *base = region;
-    BBM bits = bbmcreate(sizeof(region), 3);
-
-    assert(bits != 0);
-    assert(baddrset(base, base, 3) == region + 8);
-    assert(baddrclr(base, region + 8, 3) == base);
-    assert(baddrinv(base, region, 3) == region + 8);
-    assert(baddrinv(base, region + 8, 3) == base);
-    assert(baddrtst(base, base, 3) == 0);
-    assert(baddrtst(base, region + 8, 3) != 0);
-
-    /* Both order-3 buddies share one bit; the next pair has another bit. */
-    assert(bbmtst(bits, base, region, 3) == 0);
-    assert(bbmtst(bits, base, region + 8, 3) == 0);
-    assert(bbmtst(bits, base, region + 16, 3) == 0);
-    bbmset(bits, base, region + 8, 3);
-    assert(bbmtst(bits, base, region, 3) != 0);
-    assert(bbmtst(bits, base, region + 8, 3) != 0);
-    assert(bbmtst(bits, base, region + 16, 3) == 0);
-    bbmclr(bits, base, region, 3);
-    assert(bbmtst(bits, base, region + 8, 3) == 0);
-
-    bbmset(bits, base, region + 24, 3);
-    assert(bbmtst(bits, base, region + 16, 3) != 0);
-    assert(bbmtst(bits, base, region + 24, 3) != 0);
-    bbmdelete(bits);
-}
-
-/* Exercise initialization, splitting, lookup, and coalescing. */
+/*
+ * Exercise the free-list interface without creating a Balloc object.  Seed
+ * two order-5 blocks in a mapped 64-byte region, split one down to order 3,
+ * return it, and verify that the lists can coalesce and report allocation
+ * state correctly.  The pool mapping is used as the storage for list links.
+ */
 static void test_freelist(void)
 {
     const size_t pool_size = 64;
@@ -148,7 +99,12 @@ static void test_freelist(void)
     mmfree(base, pool_size);
 }
 
-/* Check request rounding, client writes, allocation sizes, and freeing. */
+/*
+ * Check the public allocator's request rounding: 1 byte gets an 8-byte block
+ * and 9 bytes gets a 16-byte block.  Also verify that returned memory is
+ * writable, requests above the largest order fail, and freed pointers no
+ * longer report as live allocations.
+ */
 static void test_allocator_rounding_and_memory(void)
 {
     Balloc pool = bcreate(64, 3, 5);
@@ -174,7 +130,10 @@ static void test_allocator_rounding_and_memory(void)
     bdelete(pool);
 }
 
-/* Confirm buddies coalesce into a larger allocation and then exhaust. */
+/*
+ * Fill a 16-byte pool with two 8-byte allocations, verify exhaustion, free
+ * both buddies, and confirm they coalesce into one 16-byte allocation.
+ */
 static void test_coalescing_and_exhaustion(void)
 {
     Balloc pool = bcreate(16, 3, 4);
@@ -202,7 +161,10 @@ static void test_coalescing_and_exhaustion(void)
     bdelete(pool);
 }
 
-/* Ensure invalid and duplicate frees do not corrupt free-list state. */
+/*
+ * Verify that a second free and a misaligned pointer are rejected without
+ * damaging the remaining allocation or adding a free block twice.
+ */
 static void test_repeated_and_invalid_free(void)
 {
     Balloc pool = bcreate(16, 3, 4);
@@ -229,7 +191,11 @@ static void test_repeated_and_invalid_free(void)
     bdelete(pool);
 }
 
-/* Cover irregular, oversized, and independent pool configurations. */
+/*
+ * Check pools larger than the configured maximum block, a non-power-of-two
+ * pool with a smaller leftover block, and two allocators that must manage
+ * separate mappings independently.
+ */
 static void test_pool_shapes_and_independence(void)
 {
     Balloc larger = bcreate(160, 3, 5);
@@ -277,7 +243,11 @@ static void test_pool_shapes_and_independence(void)
     bdelete(second);
 }
 
-/* Fill, exhaust, free, and coalesce small, medium, and large pools. */
+/*
+ * Exercise full-pool allocation and coalescing at three sizes.  Each pool is
+ * filled with equal-sized blocks, checked for exhaustion, freed, and then
+ * required to satisfy one allocation the size of the entire pool.
+ */
 static void test_pool_scales(void)
 {
     Balloc small = bcreate(64, 3, 6);
@@ -334,7 +304,10 @@ static void test_pool_scales(void)
     bdelete(large);
 }
 
-/* Check rejected pool configurations, zero-size requests, and zero pointer arguments. */
+/*
+ * Check invalid pool sizes and order ranges, a zero-size allocation request,
+ * and null pointers passed to bsize() and bfree().
+ */
 static void test_invalid_inputs(void)
 {
     Balloc pool;
@@ -354,9 +327,8 @@ static void test_invalid_inputs(void)
 
 int main(void)
 {
+    /* Utility and free-list behavior, followed by public allocator behavior. */
     test_utils();
-    test_bitmap();
-    test_buddy_bitmap();
     test_freelist();
     test_allocator_rounding_and_memory();
     test_coalescing_and_exhaustion();

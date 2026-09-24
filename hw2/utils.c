@@ -6,7 +6,7 @@
  */
 
 #include "utils.h"
-#include <math.h>
+#include <limits.h>
 #include <sys/mman.h>
 
 /** @copydoc mmalloc */
@@ -35,12 +35,33 @@ extern size_t bits2bytes(size_t bits) {
 
 /** @copydoc e2size */
 extern size_t e2size(int e) {
-    return (size_t)pow(2, e);
+    int width = (int)(sizeof(size_t) * CHAR_BIT);
+
+    if (e < 0 || e >= width)
+        return 0;
+
+    return (size_t)1 << e;
 }
 
 /** @copydoc size2e */
 extern int size2e(size_t size) {
-    return (int)ceil(log2(size));
+    int e = 0;
+
+    if (size <= 1)
+        return 0;
+
+    /* ceil(log2(size)) is the number of bits in size - 1. */
+    size--;
+    while (size != 0) {
+        size >>= 1;
+        e++;
+    }
+
+    /* 2^e cannot be represented as a size_t at or above this width. */
+    if (e >= (int)(sizeof(size_t) * CHAR_BIT))
+        return -1;
+
+    return e;
 }
 
 /** @copydoc bitset */

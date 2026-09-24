@@ -1,5 +1,4 @@
-# Use the shared Onyx compiler and object rules, with explicit source lists for
-# this project’s two separate test programs.
+# Use the shared Onyx compiler and object rules for both test programs.
 .DEFAULT_GOAL := all
 
 prog := buddy_tests
@@ -7,7 +6,6 @@ override objs := tests/buddy_test.o balloc.o bbm.o bm.o freelist.o utils.o
 
 defines += -I. -Ideq
 ccflags += -Wextra
-ldflags += -lm
 
 include ../GNUmakefile
 

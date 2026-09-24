@@ -42,7 +42,7 @@ static int validorder(int e)
     return 1;
 }
 
-/* Print a short diagnostic without allocating any allocator bookkeeping. */
+/* Print a short diagnostic for a failed public allocator operation. */
 static void allocatorerror(const char *function, const char *message)
 {
     fprintf(stderr, "%s: %s\n", function, message);
@@ -64,9 +64,15 @@ extern Balloc bcreate(unsigned int size, int l, int u)
     size_t offset;
 
     /* Validate the order range before calculating any powers of two. */
-    if (size == 0 || !validorder(l) || !validorder(u) || u < l)
+    if (size == 0)
     {
-        allocatorerror("bcreate", "invalid pool size or block-order range");
+        allocatorerror("bcreate", "pool size must be greater than zero");
+        return 0;
+    }
+
+    if (!validorder(l) || !validorder(u) || u < l)
+    {
+        allocatorerror("bcreate", "invalid block-order range; require supported orders with l <= u");
         return 0;
     }
 
@@ -74,7 +80,7 @@ extern Balloc bcreate(unsigned int size, int l, int u)
     /* A free block must be large enough to store its next-list pointer. */
     if (minimum < sizeof(void *) || size < minimum)
     {
-        allocatorerror("bcreate", "pool is smaller than one usable free block");
+        allocatorerror("bcreate", "pool is smaller than the minimum usable block");
         return 0;
     }
 
@@ -99,7 +105,8 @@ extern Balloc bcreate(unsigned int size, int l, int u)
     data->freelist = freelistcreate(size, l, u);
     if (data->freelist == 0)
     {
-        allocatorerror("bcreate", "could not create freelist metadata");
+        allocatorerror("bcreate",
+                       "could not allocate free-list metadata and per-order bitmaps");
         mmfree(data->base, size);
         mmfree(data, sizeof(*data));
         return 0;
@@ -155,27 +162,32 @@ extern void *balloc(Balloc pool, unsigned int size)
     BallocData *data = pool;
     int order;
 
-    if (data == 0 || data == MAP_FAILED || size == 0)
+    if (data == 0 || data == MAP_FAILED)
     {
-        allocatorerror("balloc", "allocator is invalid or request size is zero");
+        allocatorerror("balloc", "invalid allocator handle");
+        return 0;
+    }
+
+    if (size == 0)
+    {
+        allocatorerror("balloc", "request size must be greater than zero");
         return 0;
     }
 
     /* Round the byte request up to a power-of-two buddy block order. */
     order = size2e(size);
-    if (order < data->l)
-        order = data->l;
-
-    /* A request larger than the largest supported block cannot be served. */
-    if (order > data->u)
+    if (order < 0 || order > data->u)
     {
-        allocatorerror("balloc", "request exceeds the largest block size");
+        allocatorerror("balloc", "request exceeds the maximum block size");
         return 0;
     }
 
+    if (order < data->l)
+        order = data->l;
+
     void *block = freelistalloc(data->freelist, data->base, order, data->l);
     if (block == 0)
-        allocatorerror("balloc", "no suitable free block remains");
+        allocatorerror("balloc", "no free block can satisfy the request");
 
     return block;
 }
@@ -198,7 +210,7 @@ extern void bfree(Balloc pool, void *mem)
     order = freelistsize(data->freelist, data->base, mem, data->l, data->u);
     if (order < data->l)
     {
-        allocatorerror("bfree", "pointer is not a live allocation");
+        allocatorerror("bfree", "pointer is not the start of a live allocation");
         return;
     }
 
@@ -230,7 +242,7 @@ extern unsigned int bsize(Balloc pool, void *mem)
     order = freelistsize(data->freelist, data->base, mem, data->l, data->u);
     if (order < data->l)
     {
-        allocatorerror("bsize", "pointer is not a live allocation");
+        allocatorerror("bsize", "pointer is not the start of a live allocation");
         return 0;
     }
 
@@ -249,7 +261,7 @@ extern void bprint(Balloc pool)
 
     if (data == 0 || data == MAP_FAILED)
     {
-        allocatorerror("bprint", "allocator is invalid");
+        allocatorerror("bprint", "invalid allocator handle");
         return;
     }
 

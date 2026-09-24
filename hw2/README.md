@@ -18,38 +18,36 @@ The main files are:
 
 - `balloc.c` and `balloc.h`: public allocator implementation and interface
 - `freelist.c` and `freelist.h`: per-order free lists, splitting, and coalescing
-- `bbm.c` and `bbm.h`: buddy-pair bitmap operations and buddy address helpers
-- `bm.c` and `bm.h`: general-purpose bitmap implementation and interface
+- `bbm.c`/`bbm.h` and `bm.c`/`bm.h`: bitmap support used internally by the
+  free-list implementation
 - `utils.c` and `utils.h`: memory mapping, bit operations, and size conversions
 - `wrapper.c`: `malloc()` and `free()` wrapper backed by the buddy allocator
 - `deq/deq.c` and `deq/deq.h`: double-ended deque implementation and interface
-- `tests/buddy_test.c`: consolidated unit and integration tests for buddy modules
-- `tests/mainDeq.c`: original deque test suite, compiled unchanged with the
-  allocator wrapper
+- `tests/buddy_test.c`: tests for utilities, free lists, and the public allocator
+- `tests/mainDeq.c`: deque test suite, linked with the allocator wrapper
 - `GNUmakefile`: build, test, and clean targets
-
 
 ## How to Run
 
-Build the buddy and deque test programs:
+Build the buddy allocator and deque test programs:
 
 ```sh
 make
 ```
 
-Build and run the buddy tests and the original deque suite:
+Build and run the utility, free-list, allocator, and deque tests:
 
 ```sh
 make test
 ```
 
-Run only the buddy allocator tests:
+Run only the utility, free-list, and allocator tests:
 
 ```sh
 make test-buddy
 ```
 
-Run only the original deque tests through the allocator wrapper:
+Run only the deque tests through the allocator wrapper:
 
 ```sh
 make test-deq
@@ -99,58 +97,42 @@ up to a block order and asks the free-list code for memory. `bfree()` and
 actual allocation order. This separation lets `balloc.c` manage the allocator
 and lets `freelist.c` focus on splitting and merging blocks.
 
-Testing the allocator through the deque was useful because it showed the
-allocator handling regular `malloc()` and `free()` calls. The wrapper defines
-those functions and sends them to `balloc()` and `bfree()`. The deque source and
-its original test suite stay unchanged; `make test-deq` links them with the
-wrapper, and `make test` runs those tests along with the buddy module tests.
+The deque tests exercise the allocator through the `malloc()` and `free()`
+wrapper. `make test-deq` links the deque source and its test suite with that
+wrapper; the deque source and tests remain unchanged.
 
 ## Testing
 
-The consolidated test suite in `tests/buddy_test.c` covers:
+- `make test-buddy`: runs the buddy allocator tests for `utils`, `freelist`,
+  and `balloc`.
+- `make test-deq`: runs the deque tests with the allocator wrapper, which routes
+  the deque's `malloc()` and `free()` calls through `balloc()` and `bfree()`.
+- `make test`: runs both test suites.
 
-- Utility arithmetic and bit operations
-- Generic bitmap indexing across byte boundaries
-- Buddy address calculations and pair bitmap semantics
-- Free-list splitting, merging, allocation-size lookup, and exhaustion
-- Public allocator rounding, data preservation, invalid requests, and exhaustion
-- Double-free rejection and rejection of a misaligned free
-- Non-power-of-two pools, pools larger than the maximum block, and independent pools
-- Small (64-byte), medium (4 KiB), and large (1 MiB) pools filled to exhaustion,
-  freed, and checked for full coalescing
-
-`make test-deq` compiles `tests/mainDeq.c`, the deque test suite from HW1, with
-the unchanged deque source and `wrapper.c`, so deque allocations use the buddy
-allocator.
-
-## Results
-
-`make test` passes both suites. The buddy tests intentionally print diagnostics
-while checking invalid requests, frees, and exhausted pools.
-
-```text
+```
+make test
 ./buddy_tests
-balloc: request exceeds the largest block size
-bsize: pointer is not a live allocation
-bsize: pointer is not a live allocation
-balloc: no suitable free block remains
-bsize: pointer is not a live allocation
-bsize: pointer is not a live allocation
-balloc: no suitable free block remains
-bsize: pointer is not a live allocation
-bfree: pointer is not a live allocation
-bfree: pointer is not aligned to its allocation size
-balloc: no suitable free block remains
-balloc: no suitable free block remains
-balloc: no suitable free block remains
-balloc: no suitable free block remains
-balloc: no suitable free block remains
-balloc: no suitable free block remains
-bcreate: invalid pool size or block-order range
-bcreate: invalid pool size or block-order range
-bcreate: invalid pool size or block-order range
-bcreate: pool is smaller than one usable free block
-balloc: allocator is invalid or request size is zero
+balloc: 33-byte request exceeds the maximum block size of 32 bytes
+bsize: pointer 0x70543aac4020 is not the start of a live allocation (it may be freed or invalid)
+bsize: pointer 0x70543aac4030 is not the start of a live allocation (it may be freed or invalid)
+balloc: no free block can satisfy the 8-byte request (rounded to 8 bytes)
+bsize: pointer 0x70543aac4000 is not the start of a live allocation (it may be freed or invalid)
+bsize: pointer 0x70543aac4008 is not the start of a live allocation (it may be freed or invalid)
+balloc: no free block can satisfy the 8-byte request (rounded to 8 bytes)
+bsize: pointer 0x70543aac4000 is not the start of a live allocation (it may be freed or invalid)
+bfree: pointer 0x70543aac4000 is not the start of a live allocation (it may be freed or invalid)
+bfree: pointer 0x70543aac4009 is not aligned to its 8-byte allocation block
+balloc: no free block can satisfy the 8-byte request (rounded to 8 bytes)
+balloc: no free block can satisfy the 8-byte request (rounded to 8 bytes)
+balloc: no free block can satisfy the 8-byte request (rounded to 8 bytes)
+balloc: no free block can satisfy the 8-byte request (rounded to 8 bytes)
+balloc: no free block can satisfy the 256-byte request (rounded to 256 bytes)
+balloc: no free block can satisfy the 4096-byte request (rounded to 4096 bytes)
+bcreate: pool size must be greater than zero
+bcreate: invalid block-order range -1 through 5; expected supported orders with l <= u
+bcreate: invalid block-order range 5 through 3; expected supported orders with l <= u
+bcreate: pool size (4 bytes) is smaller than the minimum usable block (8 bytes)
+balloc: request size must be greater than zero
 All buddy allocator tests passed.
 stdbuf -o0 ./deq_tests
 PASS: test_empty

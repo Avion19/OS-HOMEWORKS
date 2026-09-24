@@ -59,7 +59,7 @@ extern size_t bits2bytes(size_t bits);
  * Converts a base-two exponent to its corresponding size.
  *
  * @param e Base-two exponent.
- * @return 2 raised to the power e.
+ * @return 2 raised to the power e, or 0 if e is outside the size_t range.
  */
 extern size_t e2size(int e);
 
@@ -68,7 +68,8 @@ extern size_t e2size(int e);
  * the requested size.
  *
  * @param size Number of bytes.
- * @return ceil(log2(size)).
+ * @return ceil(log2(size)); returns 0 for sizes 0 and 1, or -1 if the
+ *         required power of two cannot be represented as a size_t.
  */
 extern int size2e(size_t size);
 
