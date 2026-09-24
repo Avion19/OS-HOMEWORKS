@@ -1,25 +1,22 @@
-# Build and test the buddy allocator and its deque-wrapper integration.
-CC := gcc
-CPPFLAGS := -D_GNU_SOURCE -I. -Ideq
-CFLAGS := -g -Wall -Wextra
-LDLIBS := -lm
+# Use the shared Onyx compiler and object rules, with explicit source lists for
+# this project’s two separate test programs.
+.DEFAULT_GOAL := all
 
-ALLOCATOR_SOURCES := balloc.c bbm.c bm.c freelist.c utils.c
-ALLOCATOR_TEST := tests/buddy_test.c
-DEQ_SOURCES := deq/deq.c
-DEQ_TEST := tests/mainDeq.c
+prog := buddy_tests
+override objs := tests/buddy_test.o balloc.o bbm.o bm.o freelist.o utils.o
 
-.PHONY: all test test-buddy test-deq clean
+defines += -I. -Ideq
+ccflags += -Wextra
+ldflags += -lm
+
+include ../GNUmakefile
+
+.PHONY: all test test-buddy test-deq
 
 all: buddy_tests deq_tests
 
-buddy_tests: $(ALLOCATOR_SOURCES) $(ALLOCATOR_TEST)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(ALLOCATOR_TEST) $(ALLOCATOR_SOURCES) $(LDLIBS)
-
-# Build the user's original deque test suite without changing its source or deq/.
-deq_tests: $(DEQ_TEST) $(DEQ_SOURCES) deq/deq.h deq/error.h wrapper.c $(ALLOCATOR_SOURCES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(DEQ_TEST) $(DEQ_SOURCES) \
-		wrapper.c $(ALLOCATOR_SOURCES) $(LDLIBS)
+deq_tests: tests/mainDeq.o deq/deq.o wrapper.o balloc.o bbm.o bm.o freelist.o utils.o
+	$(ld) -o $@ $^ $(ldflags)
 
 test: test-buddy test-deq
 
@@ -30,7 +27,7 @@ test-buddy: buddy_tests
 test-deq: deq_tests
 	stdbuf -o0 ./deq_tests
 
-clean:
-	rm -f buddy_tests deq_tests hw2_tests deq_wrapper_tests deq-wrapper-tests deq-wrapper-tests.d \
-		balloc.o balloc.d bbm.o bbm.d bm.o bm.d freelist.o freelist.d \
-		utils.o utils.d wrapper.o wrapper.d
+clean::
+	rm -f deq_tests tests/*.o tests/*.d deq/*.o deq/*.d
+
+-include tests/*.d deq/*.d

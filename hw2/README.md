@@ -24,11 +24,10 @@ The main files are:
 - `wrapper.c`: `malloc()` and `free()` wrapper backed by the buddy allocator
 - `deq/deq.c` and `deq/deq.h`: double-ended deque implementation and interface
 - `tests/buddy_test.c`: consolidated unit and integration tests for buddy modules
-- `main.c`: original deque test suite, built unchanged with the allocator wrapper
+- `tests/mainDeq.c`: original deque test suite, compiled unchanged with the
+  allocator wrapper
 - `GNUmakefile`: build, test, and clean targets
 
-The `*-deep-dive.md` files explain the allocator modules and their data
-structures in more detail.
 
 ## How to Run
 
@@ -85,20 +84,26 @@ upper half to the smaller-order free list. When a block is freed, it merges
 with its buddy only if that buddy is on the same-order free list.
 
 After working through the free lists, I found it easier to understand how
-`balloc.c` connects them to the public allocator functions. `bcreate()` maps the
-pool and its bookkeeping, then divides the pool into aligned blocks that fit
-within the configured orders. `balloc()` rounds a request up to a block order
-and asks the free-list code for memory. `bfree()` and `bsize()` check the
-pointer and use the free lists and bitmaps to find its actual allocation order.
-This separation lets `balloc.c` manage the allocator and lets `freelist.c` focus
-on splitting and merging blocks.
+`balloc.c` connects them to the public allocator functions. Building reasonably
+sized blocks in `bcreate()` was a little challenging, especially for pools
+whose size is not a power of two. I eventually figured out that I could track
+how much of the pool I had used with an offset. At each step, I choose the
+largest block that fits in the remaining space, add it to the matching free
+list, and increase the offset by that block's size. This let me fill the pool
+with aligned blocks and represent the usable leftover space with smaller
+orders.
+
+`bcreate()` also maps the pool and its bookkeeping. `balloc()` rounds a request
+up to a block order and asks the free-list code for memory. `bfree()` and
+`bsize()` check the pointer and use the free lists and bitmaps to find its
+actual allocation order. This separation lets `balloc.c` manage the allocator
+and lets `freelist.c` focus on splitting and merging blocks.
 
 Testing the allocator through the deque was useful because it showed the
 allocator handling regular `malloc()` and `free()` calls. The wrapper defines
 those functions and sends them to `balloc()` and `bfree()`. The deque source and
 its original test suite stay unchanged; `make test-deq` links them with the
 wrapper, and `make test` runs those tests along with the buddy module tests.
-
 
 ## Testing
 
@@ -114,17 +119,16 @@ The consolidated test suite in `tests/buddy_test.c` covers:
 - Small (64-byte), medium (4 KiB), and large (1 MiB) pools filled to exhaustion,
   freed, and checked for full coalescing
 
-`make test-deq` compiles the existing `main.c` deque suite with the unchanged
-deque source and `wrapper.c`, so deque allocations use the buddy allocator.
+`make test-deq` compiles `tests/mainDeq.c`, the deque test suite from HW1, with
+the unchanged deque source and `wrapper.c`, so deque allocations use the buddy
+allocator.
 
 ## Results
 
-`make test` builds without compiler warnings and passes both suites. The buddy
-tests intentionally print diagnostics while checking invalid requests, frees,
-and exhausted pools.
+`make test` passes both suites. The buddy tests intentionally print diagnostics
+while checking invalid requests, frees, and exhausted pools.
 
 ```text
-gcc -D_GNU_SOURCE -I. -Ideq -g -Wall -Wextra -o buddy_tests tests/buddy_test.c balloc.c bbm.c bm.c freelist.c utils.c -lm
 ./buddy_tests
 balloc: request exceeds the largest block size
 bsize: pointer is not a live allocation
@@ -148,8 +152,6 @@ bcreate: invalid pool size or block-order range
 bcreate: pool is smaller than one usable free block
 balloc: allocator is invalid or request size is zero
 All buddy allocator tests passed.
-gcc -D_GNU_SOURCE -I. -Ideq -g -Wall -Wextra -o deq_tests main.c deq/deq.c \
-	wrapper.c balloc.c bbm.c bm.c freelist.c utils.c -lm
 stdbuf -o0 ./deq_tests
 PASS: test_empty
 PASS: test_null_behavior
